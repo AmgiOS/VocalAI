@@ -4,6 +4,8 @@ import Observation
 
 /// Orchestrates the full conversation pipeline:
 /// listening → thinking → speaking → idle
+///
+/// All asynchronous operations use async/await and AsyncStream.
 @Observable
 @MainActor
 final class ConversationViewModel {
@@ -25,25 +27,23 @@ final class ConversationViewModel {
     private let azureService = AzureSpeechService()
     private let speechService: SpeechRecognitionService
     private var currentTask: Task<Void, Never>?
+    private var micListenTask: Task<Void, Never>?
 
     // MARK: - Init
 
     init() {
         speechService = SpeechRecognitionService()
-        setupSpeechCallbacks()
     }
 
     // MARK: - Lifecycle
 
     func setup() async {
-        // Configure Azure
         do {
             try await azureService.configure()
         } catch {
             errorMessage = error.localizedDescription
         }
 
-        // Start audio engine
         do {
             try audioManager.startEngine()
         } catch {
@@ -67,21 +67,44 @@ final class ConversationViewModel {
         errorMessage = nil
 
         do {
-            try speechService.startRecognition()
-            audioManager.startMicCapture()
-            audioManager.onMicBuffer = { [weak self] buffer, _ in
-                self?.speechService.appendBuffer(buffer)
+            let speechStream = try speechService.startRecognition()
+            let micStream = audioManager.startMicCapture()
+
+            // Forward mic buffers to the speech recognizer
+            micListenTask = Task {
+                for await buffer in micStream {
+                    speechService.appendBuffer(buffer)
+                }
             }
+
+            // Consume speech recognition results
+            currentTask = Task {
+                for await result in speechStream {
+                    switch result {
+                    case .partial(let text):
+                        partialTranscript = text
+
+                    case .final(let text):
+                        partialTranscript = text
+                        audioManager.stopMicCapture()
+                        micListenTask?.cancel()
+                        await processUserMessage(text)
+                        return
+                    }
+                }
+            }
+
         } catch {
             errorMessage = error.localizedDescription
             conversationState = .idle
         }
     }
 
-    /// Stop listening and process the captured speech.
+    /// Stop listening manually and process whatever was captured.
     func stopListening() {
         guard conversationState == .listening else { return }
         audioManager.stopMicCapture()
+        micListenTask?.cancel()
         speechService.stopRecognition()
 
         let transcript = partialTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -90,13 +113,17 @@ final class ConversationViewModel {
             return
         }
 
-        processUserMessage(transcript)
+        currentTask = Task {
+            await processUserMessage(transcript)
+        }
     }
 
     /// Cancel any ongoing processing and return to idle.
     func stopConversation() {
         currentTask?.cancel()
         currentTask = nil
+        micListenTask?.cancel()
+        micListenTask = nil
         audioManager.stopPlayback()
         audioManager.stopMicCapture()
         speechService.stopRecognition()
@@ -108,14 +135,12 @@ final class ConversationViewModel {
 
     // MARK: - Pipeline
 
-    private func processUserMessage(_ text: String) {
+    private func processUserMessage(_ text: String) async {
         let userMessage = ConversationMessage(role: .user, content: text)
         messages.append(userMessage)
         partialTranscript = ""
 
-        currentTask = Task {
-            await thinkAndSpeak()
-        }
+        await thinkAndSpeak()
     }
 
     private func thinkAndSpeak() async {
@@ -150,8 +175,7 @@ final class ConversationViewModel {
             options: .regularExpression
         ).trimmingCharacters(in: .whitespacesAndNewlines)
 
-        let assistantMessage = ConversationMessage(role: .assistant, content: displayText)
-        messages.append(assistantMessage)
+        messages.append(ConversationMessage(role: .assistant, content: displayText))
 
         // Analyze emotion
         let emotion = SentimentAnalyzer.analyze(fullResponse)
@@ -163,22 +187,21 @@ final class ConversationViewModel {
 
         do {
             let result = try await azureService.synthesize(text: displayText)
-
             guard !Task.isCancelled else {
                 conversationState = .idle
                 return
             }
 
-            // Load viseme data into lip sync engine
+            // Load viseme data and start lip sync
             animationMixer.lipSyncEngine.load(result.visemeData)
-
-            // Play audio and start lip sync simultaneously
-            let format = audioManager.speechOutputFormat
             animationMixer.lipSyncEngine.play()
-            audioManager.playAudioData(result.audioData, format: format)
 
-            // Wait for playback to complete
-            await waitForPlaybackCompletion()
+            // Play audio (suspends until playback completes)
+            let format = audioManager.speechOutputFormat
+            await audioManager.playAudioData(result.audioData, format: format)
+
+            // Ensure lip sync also finishes
+            await animationMixer.lipSyncEngine.waitForCompletion()
 
         } catch {
             errorMessage = error.localizedDescription
@@ -188,38 +211,5 @@ final class ConversationViewModel {
         conversationState = .idle
         currentEmotion = .neutral
         animationMixer.emotionEngine.setEmotion(.neutral)
-    }
-
-    private func waitForPlaybackCompletion() async {
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            audioManager.onPlaybackComplete = {
-                continuation.resume()
-            }
-            animationMixer.lipSyncEngine.onComplete = { [weak self] in
-                if self?.audioManager.isPlaying == false {
-                    continuation.resume()
-                }
-            }
-        }
-    }
-
-    // MARK: - Speech Callbacks
-
-    private func setupSpeechCallbacks() {
-        speechService.onPartialResult = { [weak self] text in
-            self?.partialTranscript = text
-        }
-
-        speechService.onFinalResult = { [weak self] text in
-            guard let self else { return }
-            self.partialTranscript = text
-            if self.conversationState == .listening {
-                self.stopListening()
-            }
-        }
-
-        speechService.onError = { [weak self] error in
-            self?.errorMessage = error.localizedDescription
-        }
     }
 }

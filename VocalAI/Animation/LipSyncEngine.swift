@@ -9,11 +9,10 @@ final class LipSyncEngine {
     private var displayLink: CADisplayLink?
     private var audioStartTime: CFTimeInterval = 0
     private var currentFrameIndex: Int = 0
+    private var completionContinuation: CheckedContinuation<Void, Never>?
 
     var isPlaying = false
     private(set) var currentWeights: [BlendShapeTarget: Float] = [:]
-
-    var onComplete: (() -> Void)?
 
     // MARK: - Playback Control
 
@@ -24,9 +23,27 @@ final class LipSyncEngine {
         currentWeights = [:]
     }
 
-    /// Start lip sync playback. Call this at the exact moment audio playback begins.
+    /// Start lip sync playback and suspend until complete.
+    func playAndWait() async {
+        guard !frames.isEmpty else { return }
+
+        isPlaying = true
+        audioStartTime = CACurrentMediaTime()
+        currentFrameIndex = 0
+
+        displayLink = CADisplayLink(target: self, selector: #selector(update))
+        displayLink?.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 60)
+        displayLink?.add(to: .main, forMode: .common)
+
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            self.completionContinuation = continuation
+        }
+    }
+
+    /// Start lip sync playback (fire-and-forget for concurrent use with audio).
     func play() {
         guard !frames.isEmpty else { return }
+
         isPlaying = true
         audioStartTime = CACurrentMediaTime()
         currentFrameIndex = 0
@@ -36,13 +53,23 @@ final class LipSyncEngine {
         displayLink?.add(to: .main, forMode: .common)
     }
 
-    /// Stop lip sync playback.
+    /// Wait for the current lip sync playback to finish.
+    func waitForCompletion() async {
+        guard isPlaying else { return }
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            self.completionContinuation = continuation
+        }
+    }
+
+    /// Stop lip sync playback immediately.
     func stop() {
         isPlaying = false
         displayLink?.invalidate()
         displayLink = nil
         currentWeights = [:]
         frames = []
+        completionContinuation?.resume()
+        completionContinuation = nil
     }
 
     // MARK: - Frame Update
@@ -51,15 +78,14 @@ final class LipSyncEngine {
         guard isPlaying, !frames.isEmpty else { return }
 
         let elapsed = link.timestamp - audioStartTime
-        let targetTime = elapsed
 
-        // Find the two frames surrounding the current time for interpolation
+        // Advance to the correct frame
         while currentFrameIndex < frames.count - 1 &&
-              frames[currentFrameIndex + 1].timeOffset <= targetTime {
+              frames[currentFrameIndex + 1].timeOffset <= elapsed {
             currentFrameIndex += 1
         }
 
-        // Check if we've reached the end
+        // End of frames
         if currentFrameIndex >= frames.count - 1 {
             if let lastFrame = frames.last {
                 currentWeights = lastFrame.blendShapes
@@ -74,9 +100,8 @@ final class LipSyncEngine {
         let frameDuration = next.timeOffset - current.timeOffset
 
         if frameDuration > 0 {
-            let t = Float((targetTime - current.timeOffset) / frameDuration)
-            let clampedT = max(0, min(1, t))
-            currentWeights = lerpWeights(current.blendShapes, next.blendShapes, t: clampedT)
+            let t = Float((elapsed - current.timeOffset) / frameDuration)
+            currentWeights = lerpWeights(current.blendShapes, next.blendShapes, t: max(0, min(1, t)))
         } else {
             currentWeights = current.blendShapes
         }
@@ -88,9 +113,8 @@ final class LipSyncEngine {
         isPlaying = false
         displayLink?.invalidate()
         displayLink = nil
-
-        // Fade out mouth shapes
         currentWeights = [:]
-        onComplete?()
+        completionContinuation?.resume()
+        completionContinuation = nil
     }
 }

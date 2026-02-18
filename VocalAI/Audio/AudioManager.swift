@@ -1,15 +1,16 @@
 import AVFoundation
 
 /// Manages AVAudioEngine for microphone capture and audio playback.
+/// All async — mic capture via `AsyncStream`, playback via `async` functions.
 @MainActor
 final class AudioManager {
     private let engine = AVAudioEngine()
     private let playerNode = AVAudioPlayerNode()
     private var isMicTapInstalled = false
+    private var micContinuation: AsyncStream<AVAudioPCMBuffer>.Continuation?
+    private var playbackContinuation: CheckedContinuation<Void, Never>?
 
     var isPlaying: Bool { playerNode.isPlaying }
-    var onMicBuffer: ((_ buffer: AVAudioPCMBuffer, _ time: AVAudioTime) -> Void)?
-    var onPlaybackComplete: (() -> Void)?
 
     init() {
         engine.attach(playerNode)
@@ -32,19 +33,39 @@ final class AudioManager {
 
     // MARK: - Microphone Capture
 
-    func startMicCapture() {
-        guard !isMicTapInstalled else { return }
+    /// Start capturing microphone audio. Returns an `AsyncStream` of PCM buffers.
+    func startMicCapture() -> AsyncStream<AVAudioPCMBuffer> {
+        stopMicCapture()
 
         let inputNode = engine.inputNode
         let format = inputNode.outputFormat(forBus: 0)
 
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, time in
-            self?.onMicBuffer?(buffer, time)
+        let stream = AsyncStream<AVAudioPCMBuffer> { continuation in
+            self.micContinuation = continuation
+
+            continuation.onTermination = { @Sendable _ in
+                Task { @MainActor in
+                    self.removeMicTap()
+                }
+            }
+        }
+
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
+            self?.micContinuation?.yield(buffer)
         }
         isMicTapInstalled = true
+
+        return stream
     }
 
+    /// Stop microphone capture and finish the stream.
     func stopMicCapture() {
+        micContinuation?.finish()
+        micContinuation = nil
+        removeMicTap()
+    }
+
+    private func removeMicTap() {
         guard isMicTapInstalled else { return }
         engine.inputNode.removeTap(onBus: 0)
         isMicTapInstalled = false
@@ -52,31 +73,37 @@ final class AudioManager {
 
     // MARK: - Audio Playback
 
-    /// Play raw PCM audio data. Returns immediately; calls onPlaybackComplete when done.
-    func playAudioData(_ data: Data, format: AVAudioFormat) {
+    /// Play raw PCM audio data. Suspends until playback completes.
+    func playAudioData(_ data: Data, format: AVAudioFormat) async {
         guard let buffer = createBuffer(from: data, format: format) else { return }
-        playBuffer(buffer)
+        await playBuffer(buffer)
     }
 
-    /// Play an audio buffer directly.
-    func playBuffer(_ buffer: AVAudioPCMBuffer) {
+    /// Play an audio buffer. Suspends until playback completes.
+    func playBuffer(_ buffer: AVAudioPCMBuffer) async {
         stopPlayback()
 
-        // Reconnect player with the buffer's format
         engine.disconnectNodeOutput(playerNode)
         engine.connect(playerNode, to: engine.mainMixerNode, format: buffer.format)
 
-        playerNode.scheduleBuffer(buffer) { [weak self] in
-            Task { @MainActor in
-                self?.onPlaybackComplete?()
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            self.playbackContinuation = continuation
+
+            playerNode.scheduleBuffer(buffer) { [weak self] in
+                Task { @MainActor in
+                    self?.playbackContinuation = nil
+                    continuation.resume()
+                }
             }
+            playerNode.play()
         }
-        playerNode.play()
     }
 
-    /// Stop current audio playback.
+    /// Stop current audio playback immediately.
     func stopPlayback() {
         playerNode.stop()
+        playbackContinuation?.resume()
+        playbackContinuation = nil
     }
 
     // MARK: - Audio Format

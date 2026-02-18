@@ -1,16 +1,20 @@
 import Speech
 import AVFoundation
 
+/// Result emitted by the speech recognition stream.
+enum SpeechResult: Sendable {
+    case partial(String)
+    case final(String)
+}
+
 /// Wraps Apple's SFSpeechRecognizer for on-device speech-to-text.
+/// Results are delivered via an `AsyncStream<SpeechResult>`.
 @MainActor
 final class SpeechRecognitionService {
     private let speechRecognizer: SFSpeechRecognizer?
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
-
-    var onPartialResult: ((String) -> Void)?
-    var onFinalResult: ((String) -> Void)?
-    var onError: ((Error) -> Void)?
+    private var resultContinuation: AsyncStream<SpeechResult>.Continuation?
 
     var isRecognizing: Bool { recognitionTask != nil }
 
@@ -28,10 +32,11 @@ final class SpeechRecognitionService {
         }
     }
 
-    // MARK: - Recognition Control
+    // MARK: - Recognition
 
-    /// Start speech recognition. Feed audio buffers via `appendBuffer(_:)`.
-    func startRecognition() throws {
+    /// Start speech recognition and return a stream of results.
+    /// Feed audio buffers via `appendBuffer(_:)`. Call `stopRecognition()` to end.
+    func startRecognition() throws -> AsyncStream<SpeechResult> {
         stopRecognition()
 
         guard let speechRecognizer, speechRecognizer.isAvailable else {
@@ -42,33 +47,45 @@ final class SpeechRecognitionService {
         request.shouldReportPartialResults = true
         request.addsPunctuation = true
 
-        // Prefer on-device recognition when available
         if speechRecognizer.supportsOnDeviceRecognition {
             request.requiresOnDeviceRecognition = true
         }
 
         recognitionRequest = request
 
-        recognitionTask = speechRecognizer.recognitionTask(with: request) { [weak self] result, error in
-            Task { @MainActor [weak self] in
-                if let result {
-                    let text = result.bestTranscription.formattedString
-                    if result.isFinal {
-                        self?.onFinalResult?(text)
-                        self?.stopRecognition()
-                    } else {
-                        self?.onPartialResult?(text)
-                    }
-                }
+        let stream = AsyncStream<SpeechResult> { continuation in
+            self.resultContinuation = continuation
 
-                if let error {
-                    // Ignore cancellation errors from stopping recognition
-                    if (error as NSError).code != 216 {
-                        self?.onError?(error)
-                    }
+            continuation.onTermination = { @Sendable _ in
+                Task { @MainActor in
+                    self.cleanupRecognition()
                 }
             }
         }
+
+        recognitionTask = speechRecognizer.recognitionTask(with: request) { [weak self] result, error in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+
+                if let result {
+                    let text = result.bestTranscription.formattedString
+                    if result.isFinal {
+                        self.resultContinuation?.yield(.final(text))
+                        self.resultContinuation?.finish()
+                        self.cleanupRecognition()
+                    } else {
+                        self.resultContinuation?.yield(.partial(text))
+                    }
+                }
+
+                if let error, (error as NSError).code != 216 {
+                    self.resultContinuation?.finish()
+                    self.cleanupRecognition()
+                }
+            }
+        }
+
+        return stream
     }
 
     /// Feed an audio buffer from AVAudioEngine to the recognizer.
@@ -76,8 +93,14 @@ final class SpeechRecognitionService {
         recognitionRequest?.append(buffer)
     }
 
-    /// Stop recognition and clean up.
+    /// Stop recognition and finish the stream.
     func stopRecognition() {
+        resultContinuation?.finish()
+        resultContinuation = nil
+        cleanupRecognition()
+    }
+
+    private func cleanupRecognition() {
         recognitionRequest?.endAudio()
         recognitionRequest = nil
         recognitionTask?.cancel()
