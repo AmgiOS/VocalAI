@@ -1,0 +1,25 @@
+# Xcode
+*.xcuserstate
+*.xcuserdatad/
+DerivedData/
+build/
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.moved-aside
+xcuserdata/
+
+# Azure Speech SDK xcframework (downloaded via setup script)
+Frameworks/
+
+# CocoaPods (not used, SPM instead)
+Pods/
+Podfile.lock
+
+# SPM
+.build/
+Package.resolved
+
+# macOS
+.DS_Store
