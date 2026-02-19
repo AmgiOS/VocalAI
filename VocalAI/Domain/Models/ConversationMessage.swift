@@ -6,7 +6,7 @@ nonisolated enum MessageRole: String, Codable, Sendable {
     case system
 }
 
-nonisolated struct ConversationMessage: Identifiable, Sendable {
+nonisolated struct ConversationMessage: Identifiable, Equatable, Sendable {
     let id = UUID()
     let role: MessageRole
     let content: String

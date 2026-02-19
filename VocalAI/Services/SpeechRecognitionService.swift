@@ -1,12 +1,6 @@
 import Speech
 import AVFoundation
 
-/// Result emitted by the speech recognition stream.
-enum SpeechResult: Sendable {
-    case partial(String)
-    case final(String)
-}
-
 /// Wraps Apple's SFSpeechRecognizer for on-device speech-to-text.
 /// Results are delivered via an `AsyncStream<SpeechResult>`.
 @MainActor

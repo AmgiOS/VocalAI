@@ -13,3 +13,8 @@ struct AvatarContainerView: UIViewRepresentable {
         // No dynamic updates needed — rendering is handled by AvatarRenderer
     }
 }
+
+#Preview {
+    AvatarContainerView(renderer: AvatarRenderer())
+        .ignoresSafeArea()
+}

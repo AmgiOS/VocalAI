@@ -3,24 +3,17 @@ import SwiftUI
 /// Settings view for configuring API keys, voice selection, and persona.
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
-
-    @State private var azureKey = Configuration.azureSpeechKey
-    @State private var azureRegion = Configuration.azureSpeechRegion
-    @State private var claudeKey = Configuration.claudeAPIKey
-    @State private var voiceName = Configuration.azureVoiceName
-    @State private var language = Configuration.speechLanguage
-    @State private var claudeModel = Configuration.claudeModel
-    @State private var systemPrompt = Configuration.systemPrompt
+    @State private var viewModel = SettingsViewModel()
 
     var body: some View {
         NavigationStack {
             Form {
                 // MARK: - Azure Speech
                 Section {
-                    SecureField("Speech Key", text: $azureKey)
+                    SecureField("Speech Key", text: $viewModel.state.azureKey)
                         .textContentType(.password)
                         .autocorrectionDisabled()
-                    TextField("Region", text: $azureRegion)
+                    TextField("Region", text: $viewModel.state.azureRegion)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
                 } header: {
@@ -31,10 +24,10 @@ struct SettingsView: View {
 
                 // MARK: - Claude API
                 Section {
-                    SecureField("API Key", text: $claudeKey)
+                    SecureField("API Key", text: $viewModel.state.claudeKey)
                         .textContentType(.password)
                         .autocorrectionDisabled()
-                    Picker("Model", selection: $claudeModel) {
+                    Picker("Model", selection: $viewModel.state.claudeModel) {
                         Text("Claude Sonnet 4.6").tag("claude-sonnet-4-6")
                         Text("Claude Haiku 4.5").tag("claude-haiku-4-5-20251001")
                         Text("Claude Opus 4.6").tag("claude-opus-4-6")
@@ -47,7 +40,7 @@ struct SettingsView: View {
 
                 // MARK: - Voice Settings
                 Section {
-                    Picker("Language", selection: $language) {
+                    Picker("Language", selection: $viewModel.state.language) {
                         Text("English (US)").tag("en-US")
                         Text("English (UK)").tag("en-GB")
                         Text("French").tag("fr-FR")
@@ -55,7 +48,7 @@ struct SettingsView: View {
                         Text("German").tag("de-DE")
                         Text("Japanese").tag("ja-JP")
                     }
-                    TextField("Voice Name", text: $voiceName)
+                    TextField("Voice Name", text: $viewModel.state.voiceName)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
                 } header: {
@@ -66,7 +59,7 @@ struct SettingsView: View {
 
                 // MARK: - Persona
                 Section {
-                    TextEditor(text: $systemPrompt)
+                    TextEditor(text: $viewModel.state.systemPrompt)
                         .frame(minHeight: 100)
                 } header: {
                     Label("Persona", systemImage: "person")
@@ -79,14 +72,14 @@ struct SettingsView: View {
                     HStack {
                         Text("Azure")
                         Spacer()
-                        Image(systemName: !azureKey.isEmpty ? "checkmark.circle.fill" : "xmark.circle.fill")
-                            .foregroundStyle(!azureKey.isEmpty ? .green : .red)
+                        Image(systemName: !viewModel.state.azureKey.isEmpty ? "checkmark.circle.fill" : "xmark.circle.fill")
+                            .foregroundStyle(!viewModel.state.azureKey.isEmpty ? .green : .red)
                     }
                     HStack {
                         Text("Claude")
                         Spacer()
-                        Image(systemName: !claudeKey.isEmpty ? "checkmark.circle.fill" : "xmark.circle.fill")
-                            .foregroundStyle(!claudeKey.isEmpty ? .green : .red)
+                        Image(systemName: !viewModel.state.claudeKey.isEmpty ? "checkmark.circle.fill" : "xmark.circle.fill")
+                            .foregroundStyle(!viewModel.state.claudeKey.isEmpty ? .green : .red)
                     }
                 } header: {
                     Label("Status", systemImage: "checkmark.shield")
@@ -97,22 +90,12 @@ struct SettingsView: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {
-                        saveSettings()
+                        viewModel.save()
                         dismiss()
                     }
                 }
             }
         }
-    }
-
-    private func saveSettings() {
-        Configuration.azureSpeechKey = azureKey
-        Configuration.azureSpeechRegion = azureRegion
-        Configuration.claudeAPIKey = claudeKey
-        Configuration.azureVoiceName = voiceName
-        Configuration.speechLanguage = language
-        Configuration.claudeModel = claudeModel
-        Configuration.systemPrompt = systemPrompt
     }
 }
 

@@ -55,28 +55,38 @@ struct ChatOverlayView: View {
     }
 }
 
-// MARK: - Message Bubble
+#Preview("Chat - Conversation") {
+    ChatOverlayView(
+        messages: PreviewData.sampleMessages,
+        partialTranscript: "",
+        currentResponse: "",
+        state: .idle
+    )
+    .frame(maxHeight: 200)
+    .padding()
+    .background(Color.black)
+}
 
-private struct MessageBubble: View {
-    let message: ConversationMessage
+#Preview("Chat - Listening") {
+    ChatOverlayView(
+        messages: PreviewData.singleUserMessage,
+        partialTranscript: "I was wondering about...",
+        currentResponse: "",
+        state: .listening
+    )
+    .frame(maxHeight: 200)
+    .padding()
+    .background(Color.black)
+}
 
-    var body: some View {
-        HStack {
-            if message.role == .user { Spacer(minLength: 40) }
-
-            Text(message.content)
-                .font(.subheadline)
-                .foregroundStyle(message.role == .user ? .white : .primary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(message.role == .user
-                              ? Color.blue.opacity(0.7)
-                              : Color.gray.opacity(0.2))
-                )
-
-            if message.role == .assistant { Spacer(minLength: 40) }
-        }
-    }
+#Preview("Chat - Thinking") {
+    ChatOverlayView(
+        messages: PreviewData.sampleMessages,
+        partialTranscript: "",
+        currentResponse: "Sure! Let me think about that...",
+        state: .thinking
+    )
+    .frame(maxHeight: 200)
+    .padding()
+    .background(Color.black)
 }

@@ -123,3 +123,27 @@ struct MicrophoneButton: View {
         }
     }
 }
+
+#Preview("Microphone Button - Idle") {
+    MicrophoneButton(state: .idle, onTapDown: {}, onTapUp: {}, onCancel: {})
+        .padding()
+        .background(Color.black)
+}
+
+#Preview("Microphone Button - Listening") {
+    MicrophoneButton(state: .listening, onTapDown: {}, onTapUp: {}, onCancel: {})
+        .padding()
+        .background(Color.black)
+}
+
+#Preview("Microphone Button - Thinking") {
+    MicrophoneButton(state: .thinking, onTapDown: {}, onTapUp: {}, onCancel: {})
+        .padding()
+        .background(Color.black)
+}
+
+#Preview("Microphone Button - Speaking") {
+    MicrophoneButton(state: .speaking, onTapDown: {}, onTapUp: {}, onCancel: {})
+        .padding()
+        .background(Color.black)
+}

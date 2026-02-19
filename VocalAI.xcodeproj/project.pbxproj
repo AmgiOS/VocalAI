@@ -8,6 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		C9AB252E2F47289A0032D25B /* AzureSpeechSDK in Frameworks */ = {isa = PBXBuildFile; productRef = C9AB252D2F47289A0032D25B /* AzureSpeechSDK */; };
+		C9AB25312F472D9A0032D25B /* Dependencies in Frameworks */ = {isa = PBXBuildFile; productRef = C9AB25302F472D9A0032D25B /* Dependencies */; };
+		C9AB25332F472D9A0032D25B /* DependenciesMacros in Frameworks */ = {isa = PBXBuildFile; productRef = C9AB25322F472D9A0032D25B /* DependenciesMacros */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -57,6 +59,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				C9AB252E2F47289A0032D25B /* AzureSpeechSDK in Frameworks */,
+				C9AB25312F472D9A0032D25B /* Dependencies in Frameworks */,
+				C9AB25332F472D9A0032D25B /* DependenciesMacros in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -118,6 +122,8 @@
 			name = VocalAI;
 			packageProductDependencies = (
 				C9AB252D2F47289A0032D25B /* AzureSpeechSDK */,
+				C9AB25302F472D9A0032D25B /* Dependencies */,
+				C9AB25322F472D9A0032D25B /* DependenciesMacros */,
 			);
 			productName = VocalAI;
 			productReference = C932C36F2F4658E000749208 /* VocalAI.app */;
@@ -203,6 +209,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				C9AB252C2F47289A0032D25B /* XCLocalSwiftPackageReference "Packages/AzureSpeechSDK" */,
+				C9AB252F2F472D9A0032D25B /* XCRemoteSwiftPackageReference "swift-dependencies" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = C932C3702F4658E000749208 /* Products */;
@@ -599,10 +606,31 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		C9AB252F2F472D9A0032D25B /* XCRemoteSwiftPackageReference "swift-dependencies" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/pointfreeco/swift-dependencies";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.11.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
 		C9AB252D2F47289A0032D25B /* AzureSpeechSDK */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = AzureSpeechSDK;
+		};
+		C9AB25302F472D9A0032D25B /* Dependencies */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C9AB252F2F472D9A0032D25B /* XCRemoteSwiftPackageReference "swift-dependencies" */;
+			productName = Dependencies;
+		};
+		C9AB25322F472D9A0032D25B /* DependenciesMacros */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C9AB252F2F472D9A0032D25B /* XCRemoteSwiftPackageReference "swift-dependencies" */;
+			productName = DependenciesMacros;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
