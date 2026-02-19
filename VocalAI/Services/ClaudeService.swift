@@ -140,7 +140,7 @@ extension ClaudeService {
 
 // MARK: - Errors
 
-enum ClaudeError: LocalizedError {
+nonisolated enum ClaudeError: LocalizedError {
     case missingAPIKey
     case invalidResponse
     case apiError(statusCode: Int, message: String)

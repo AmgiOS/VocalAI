@@ -5,7 +5,6 @@ import RealityKit
 final class BlendShapeController {
     private let rootEntity: Entity
     private var meshEntity: ModelEntity?
-    private var weightsMapping: BlendShapeWeightsMapping?
     private var currentWeights: [BlendShapeTarget: Float] = [:]
 
     init(entity: Entity) {
@@ -16,25 +15,30 @@ final class BlendShapeController {
     // MARK: - Setup
 
     private func findMeshEntity() {
-        if let model = rootEntity as? ModelEntity, model.components.has(BlendShapeWeightsComponent.self) {
+        if let model = rootEntity as? ModelEntity,
+           model.components.has(BlendShapeWeightsComponent.self) {
             meshEntity = model
         } else {
-            meshEntity = findFirstEntityWithBlendShapes(in: rootEntity)
+            meshEntity = findFirstModelEntity(in: rootEntity)
         }
 
         guard let meshEntity else { return }
 
-        if let component = meshEntity.components[BlendShapeWeightsComponent.self] {
-            weightsMapping = component.weightsMapping
+        // Create BlendShapeWeightsComponent from mesh if not already present
+        if meshEntity.components[BlendShapeWeightsComponent.self] == nil,
+           let modelComponent = meshEntity.components[ModelComponent.self] {
+            let mapping = BlendShapeWeightsMapping(meshResource: modelComponent.mesh)
+            meshEntity.components.set(BlendShapeWeightsComponent(weightsMapping: mapping))
         }
     }
 
-    private func findFirstEntityWithBlendShapes(in entity: Entity) -> ModelEntity? {
-        if let model = entity as? ModelEntity, model.components.has(BlendShapeWeightsComponent.self) {
+    private func findFirstModelEntity(in entity: Entity) -> ModelEntity? {
+        if let model = entity as? ModelEntity,
+           model.components.has(ModelComponent.self) {
             return model
         }
         for child in entity.children {
-            if let found = findFirstEntityWithBlendShapes(in: child) {
+            if let found = findFirstModelEntity(in: child) {
                 return found
             }
         }
@@ -46,7 +50,7 @@ final class BlendShapeController {
     /// Set a single blend shape weight (0.0 to 1.0).
     func setWeight(_ target: BlendShapeTarget, value: Float) {
         currentWeights[target] = value
-        applyWeight(target, value: value)
+        applyAllWeights()
     }
 
     /// Set multiple blend shape weights at once.
@@ -76,44 +80,39 @@ final class BlendShapeController {
 
     /// Whether the entity has working blend shapes.
     var hasBlendShapes: Bool {
-        weightsMapping != nil && meshEntity != nil
+        guard let meshEntity,
+              let component = meshEntity.components[BlendShapeWeightsComponent.self],
+              component.weightSet.default != nil else {
+            return false
+        }
+        return true
     }
 
     // MARK: - Private
 
-    private func applyWeight(_ target: BlendShapeTarget, value: Float) {
-        guard let meshEntity, var component = meshEntity.components[BlendShapeWeightsComponent.self],
-              let mapping = weightsMapping else { return }
-
-        let clamped = max(0, min(1, value))
-
-        do {
-            let indices = mapping.indices(of: target.rawValue)
-            for index in indices {
-                component.weights[index] = clamped
-            }
-            meshEntity.components.set(component)
-        }
-    }
-
     private func applyAllWeights() {
-        guard let meshEntity, var component = meshEntity.components[BlendShapeWeightsComponent.self],
-              let mapping = weightsMapping else { return }
+        guard let meshEntity,
+              var component = meshEntity.components[BlendShapeWeightsComponent.self] else { return }
 
-        // Reset all to 0 first
-        for i in 0..<component.weights.count {
-            component.weights[i] = 0
+        var weightSet = component.weightSet
+        guard var blendData = weightSet.default else { return }
+
+        // Reset all weights to 0
+        for i in blendData.weights.indices {
+            blendData.weights[i] = 0
         }
 
-        // Apply current weights
+        // Apply current weights by matching name
         for (target, value) in currentWeights {
             let clamped = max(0, min(1, value))
-            let indices = mapping.indices(of: target.rawValue)
-            for index in indices {
-                component.weights[index] = clamped
+            if let index = blendData.weightNames.firstIndex(of: target.rawValue) {
+                blendData.weights[index] = clamped
             }
         }
 
+        // Write back through the full chain
+        weightSet.set(blendData)
+        component.weightSet = weightSet
         meshEntity.components.set(component)
     }
 }

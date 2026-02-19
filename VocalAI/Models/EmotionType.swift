@@ -1,6 +1,6 @@
 import Foundation
 
-enum EmotionType: String, CaseIterable, Sendable {
+nonisolated enum EmotionType: String, CaseIterable, Sendable {
     case neutral
     case happy
     case sad

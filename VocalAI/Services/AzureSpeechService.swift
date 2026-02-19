@@ -36,7 +36,7 @@ actor AzureSpeechService {
 
         // Use pull audio stream to capture raw audio
         let audioStream = SPXPullAudioOutputStream()
-        let audioConfig = SPXAudioConfiguration(streamOutput: audioStream)
+        let audioConfig = try SPXAudioConfiguration(streamOutput: audioStream)
 
         let synth = try SPXSpeechSynthesizer(speechConfiguration: config, audioConfiguration: audioConfig)
 
@@ -45,7 +45,8 @@ actor AzureSpeechService {
         var frameOffset = 0
 
         synth.addVisemeReceivedEventHandler { _, event in
-            guard let animation = event.animation,
+            let animation = event.animation
+            guard !animation.isEmpty,
                   let data = animation.data(using: .utf8),
                   let payload = try? JSONDecoder().decode(AzureVisemePayload.self, from: data) else {
                 return
@@ -100,13 +101,12 @@ actor AzureSpeechService {
 
     private func readAudioStream(_ stream: SPXPullAudioOutputStream) -> Data {
         var audioData = Data()
-        let chunkSize: Int = 4096
-        var buffer = [UInt8](repeating: 0, count: chunkSize)
+        let chunkSize: UInt = 4096
+        let buffer = NSMutableData(capacity: Int(chunkSize))!
 
-        while true {
-            let bytesRead = stream.read(&buffer, dataLength: UInt(chunkSize))
-            if bytesRead == 0 { break }
-            audioData.append(contentsOf: buffer.prefix(Int(bytesRead)))
+        while stream.read(buffer, length: chunkSize) > 0 {
+            audioData.append(buffer as Data)
+            buffer.length = 0
         }
 
         return audioData
@@ -115,14 +115,14 @@ actor AzureSpeechService {
 
 // MARK: - Result Type
 
-struct SynthesisResult: Sendable {
+nonisolated struct SynthesisResult: Sendable {
     let audioData: Data
     let visemeData: VisemeData
 }
 
 // MARK: - Errors
 
-enum AzureError: LocalizedError {
+nonisolated enum AzureError: LocalizedError {
     case notConfigured
     case synthesisError(String)
 

@@ -2,7 +2,7 @@ import Foundation
 
 /// A single frame of Azure Speech SDK FacialExpression viseme data.
 /// Each frame contains 55 blend shape weights at ~60 FPS.
-struct VisemeFrame: Sendable {
+nonisolated struct VisemeFrame: Sendable {
     let frameIndex: Int
     let blendShapes: [BlendShapeTarget: Float]
 
@@ -13,7 +13,7 @@ struct VisemeFrame: Sendable {
 }
 
 /// Container for all viseme frames from a single TTS utterance.
-struct VisemeData: Sendable {
+nonisolated struct VisemeData: Sendable {
     let frames: [VisemeFrame]
     let totalDuration: Double
 
@@ -27,7 +27,7 @@ struct VisemeData: Sendable {
 
 /// Raw JSON structure from Azure VisemeReceived event:
 /// { "FrameIndex": 0, "BlendShapes": [[0.0, 0.1, ...], [0.0, 0.2, ...], ...] }
-struct AzureVisemePayload: Decodable {
+nonisolated struct AzureVisemePayload: Decodable, Sendable {
     let FrameIndex: Int
     let BlendShapes: [[Float]]
 

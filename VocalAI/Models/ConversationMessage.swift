@@ -1,12 +1,12 @@
 import Foundation
 
-enum MessageRole: String, Codable, Sendable {
+nonisolated enum MessageRole: String, Codable, Sendable {
     case user
     case assistant
     case system
 }
 
-struct ConversationMessage: Identifiable, Sendable {
+nonisolated struct ConversationMessage: Identifiable, Sendable {
     let id = UUID()
     let role: MessageRole
     let content: String

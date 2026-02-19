@@ -3,7 +3,7 @@ import Foundation
 /// All 52 ARKit blend shapes supported by Character Creator 5 exports.
 /// The order matches Azure Speech SDK's FacialExpression viseme output (indices 0-51),
 /// plus 3 Azure-only extras (headRoll, leftEyeRoll, rightEyeRoll at indices 52-54).
-enum BlendShapeTarget: String, CaseIterable, Sendable {
+nonisolated enum BlendShapeTarget: String, CaseIterable, Sendable {
     // MARK: - Eye (Brow)
     case browDownLeft
     case browDownRight
