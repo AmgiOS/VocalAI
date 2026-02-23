@@ -10,32 +10,89 @@ Application iOS de conversation vocale avec un personnage 3D photoréaliste. Syn
 - **Claude API** — Streaming HTTP (`URLSession.bytes`), pas de lib tierce
 - **Apple SFSpeechRecognizer** — STT on-device
 - **AVAudioEngine** — Capture micro + lecture audio, mode `.voiceChat`
+- **TCA Dependencies** (pointfreeco/swift-dependencies) — Injection de dépendances
 
 ## Architecture
 
+Clean Architecture + MVVM avec injection de dépendances via TCA Dependencies.
+
 ```
 VocalAI/
-├── App/           AppState (@Observable), Configuration (API keys via UserDefaults)
-├── Models/        BlendShapeTarget (52 ARKit shapes), EmotionType, VisemeFrame, ConversationMessage
-├── Views/         ConversationView, AvatarContainerView, ChatOverlayView, MicrophoneButton, SettingsView
-├── ViewModels/    ConversationViewModel (orchestrateur pipeline)
-├── Rendering/     AvatarRenderer (scene RealityKit), BlendShapeController (poids blend shapes)
-├── Animation/     LipSyncEngine (CADisplayLink), EmotionEngine, IdleAnimator, AnimationMixer
-├── Services/      ClaudeService (actor), AzureSpeechService (actor), SpeechRecognitionService
-├── Audio/         AudioManager (AVAudioEngine), AudioSessionConfigurator
-├── Utilities/     Interpolation (lerp, smoothstep), SentimentAnalyzer
-└── Resources/     avatar.usdz (placeholder — à remplacer par export CC5)
+├── App/
+│   ├── AppState.swift                            @Observable — permissions, showSettings, isAvatarLoaded
+│   └── Configuration.swift                       API keys via UserDefaults (@AppStorageBacked)
+│
+├── Domain/
+│   ├── Models/
+│   │   ├── BlendShapeTarget.swift                52 ARKit shapes + Azure mapping
+│   │   ├── ConversationMessage.swift             MessageRole + message struct
+│   │   ├── ConversationPipelineEvent.swift       Events émis par le UseCase (textChunk, responseComplete, synthesisComplete)
+│   │   ├── ConversationState.swift               idle, listening, thinking, speaking
+│   │   ├── EmotionType.swift                     7 émotions avec presets blend shapes
+│   │   ├── SpeechResult.swift                    partial/final recognition results
+│   │   └── VisemeFrame.swift                     VisemeFrame, VisemeData, AzureVisemePayload
+│   ├── Protocols/
+│   │   ├── DataSources/                          ChatDataSourceProtocol, SpeechSynthesis*, SpeechRecognition*
+│   │   ├── Repositories/                         ConversationRepositoryProtocol, SpeechRepositoryProtocol
+│   │   └── UseCases/                             ConversationUseCaseProtocol
+│   └── UseCases/
+│       ├── ConversationUseCase.swift             Orchestre : stream Claude → émotion → TTS Azure
+│       └── EmotionAnalysisUseCase.swift          Wrap SentimentAnalyzer
+│
+├── Data/
+│   ├── DataSources/
+│   │   ├── ClaudeChatDataSource.swift            Wrap ClaudeService
+│   │   ├── AzureSpeechSynthesisDataSource.swift  Wrap AzureSpeechService
+│   │   └── AppleSpeechRecognitionDataSource.swift Wrap SpeechRecognitionService
+│   └── Repositories/
+│       ├── ConversationRepository.swift          Absorbe config (systemPrompt, model)
+│       └── SpeechRepository.swift                Combine TTS + STT
+│
+├── DI/
+│   ├── DependencyValues+Repositories.swift       conversationRepository, speechRepository
+│   ├── DependencyValues+UseCases.swift           conversationUseCase, emotionAnalysis
+│   └── DependencyValues+AudioManager.swift       audioManager
+│
+├── Presentation/
+│   ├── ViewModels/
+│   │   ├── ConversationViewModel.swift           State struct + @Dependency — orchestre le pipeline
+│   │   └── SettingsViewModel.swift               State struct pour les settings
+│   ├── Views/
+│   │   ├── ConversationView.swift                Vue principale (avatar + chat + mic)
+│   │   ├── SettingsView.swift                    Configuration API keys, voix, persona
+│   │   └── AvatarContainerView.swift             UIViewRepresentable wrappant ARView
+│   └── Components/
+│       ├── ChatOverlayView.swift                 Transcript de conversation
+│       ├── MessageBubble.swift                   Bulle de message (user/assistant)
+│       ├── MicrophoneButton.swift                Bouton micro animé
+│       ├── StatusIndicator.swift                 Indicateur d'état (listening/thinking/speaking)
+│       └── ErrorBanner.swift                     Bannière d'erreur dismissable
+│
+├── Mocks/
+│   ├── MockConversationRepository.swift          Réponses canned pour previews/tests
+│   ├── MockSpeechRepository.swift                No-op TTS/STT
+│   ├── MockConversationUseCase.swift             Pipeline simulé
+│   └── PreviewData.swift                         Données de conversation d'exemple
+│
+├── Services/          ClaudeService (actor), AzureSpeechService (actor), SpeechRecognitionService
+├── Audio/             AudioManager (AVAudioEngine), AudioSessionConfigurator
+├── Animation/         LipSyncEngine (CADisplayLink), EmotionEngine, IdleAnimator, AnimationMixer
+├── Rendering/         AvatarRenderer (scene RealityKit), BlendShapeController (poids blend shapes)
+├── Utilities/         Interpolation (lerp, smoothstep), SentimentAnalyzer
+└── Resources/         avatar.usdz (placeholder — à remplacer par export CC5)
 ```
 
 ## Pipeline conversationnel
 
 ```
 User parle → AVAudioEngine → SFSpeechRecognizer → texte
-  → Claude API streaming → réponse texte
-  → SentimentAnalyzer → EmotionEngine
-  → Azure TTS (SSML FacialExpression) → audio PCM + visèmes
-  → AudioManager (lecture) + LipSyncEngine (animation)
-  → AnimationMixer → BlendShapeController → RealityKit
+  → ConversationUseCase.thinkAndSynthesize() :
+    → ConversationRepository → Claude API streaming → textChunk events
+    → EmotionAnalysisUseCase → responseComplete event
+    → SpeechRepository → Azure TTS → synthesisComplete event
+  → ConversationViewModel consomme les events :
+    → AudioManager (lecture) + LipSyncEngine (animation)
+    → AnimationMixer → BlendShapeController → RealityKit
 ```
 
 ## Conventions Swift
@@ -47,23 +104,45 @@ User parle → AVAudioEngine → SFSpeechRecognizer → texte
   - `AsyncStream<AVAudioPCMBuffer>` pour la capture micro continue
   - `AsyncStream<SpeechResult>` pour les résultats STT (partial/final)
   - `AsyncThrowingStream<String, Error>` pour le streaming Claude
+  - `AsyncThrowingStream<ConversationPipelineEvent, Error>` pour le pipeline UseCase
   - `async func playBuffer()` avec `CheckedContinuation` pour la lecture audio
   - `async func waitForCompletion()` pour la synchronisation lip sync
 - **UI** : SwiftUI avec `@Observable` (pas Combine). `@Environment` pour l'injection de `AppState`.
 - **Pas de CoreData** — supprimé du scaffold initial.
-- **Pas de dépendances tierces** sauf Azure Speech SDK (SPM local dans `Packages/AzureSpeechSDK/`).
 
-## Dépendance Azure Speech SDK
+## Injection de dépendances (TCA Dependencies)
 
-Pas de CocoaPods. Le SDK est intégré via un package SPM local wrappant le xcframework :
+- **`@Dependency(\.key)`** dans les ViewModels pour accéder aux repositories et use cases.
+- **`@ObservationIgnored`** sur toutes les `@Dependency` et les propriétés non-UI (tasks, animation mixer).
+- **DependencyKey** avec `liveValue` pour la prod. Les mocks sont dans `Mocks/`.
+- **`withDependencies`** dans les `#Preview` pour injecter les mocks.
 
+### ViewModel State Pattern
+
+Chaque ViewModel expose un seul `var state = State()` — une struct `Equatable` contenant tout l'état UI observable. Les dépendances sont marquées `@ObservationIgnored`.
+
+```swift
+@Observable @MainActor
+final class ConversationViewModel {
+    struct State: Equatable { ... }
+    var state = State()
+    @ObservationIgnored @Dependency(\.conversationUseCase) private var conversationUseCase
+}
 ```
-Packages/AzureSpeechSDK/     → Package.swift avec binaryTarget
-Frameworks/                  → MicrosoftCognitiveServicesSpeech.xcframework (gitignored)
-scripts/setup-azure-sdk.sh   → Télécharge le xcframework depuis Microsoft
-```
 
-Setup : `./scripts/setup-azure-sdk.sh` puis ajouter le package local dans Xcode.
+Les vues accèdent à l'état via `viewModel.state.conversationState`, `viewModel.state.messages`, etc.
+
+## Dépendances externes
+
+- **Azure Speech SDK** — SPM local wrappant le xcframework :
+  ```
+  Packages/AzureSpeechSDK/     → Package.swift avec binaryTarget
+  Frameworks/                  → MicrosoftCognitiveServicesSpeech.xcframework (gitignored)
+  scripts/setup-azure-sdk.sh   → Télécharge le xcframework depuis Microsoft
+  ```
+  Setup : `./scripts/setup-azure-sdk.sh` puis ajouter le package local dans Xcode.
+
+- **TCA Dependencies** — `pointfreeco/swift-dependencies` via SPM distant.
 
 ## Blend Shapes
 
@@ -82,7 +161,7 @@ Les 55 positions Azure correspondent directement aux 52 ARKit blend shapes + 3 e
 ./scripts/setup-azure-sdk.sh
 
 # Build (depuis terminal)
-xcodebuild -project VocalAI.xcodeproj -scheme VocalAI -sdk iphoneos build
+xcodebuild -project VocalAI.xcodeproj -scheme VocalAI -destination 'generic/platform=iOS' build
 ```
 
 ## Info.plist
@@ -97,3 +176,4 @@ Clés de confidentialité ajoutées via build settings (`INFOPLIST_KEY_*`) :
 - L'avatar placeholder est une sphère bleue si `avatar.usdz` n'est pas dans Resources.
 - Les clés API sont stockées dans UserDefaults (dev). En production, utiliser Keychain.
 - `accessibilityReduceMotion` est respecté dans `IdleAnimator`.
+- Les fichiers `Services/`, `Audio/`, `Animation/`, `Rendering/`, `Utilities/` ne sont **pas** modifiés par les DataSources — ceux-ci les wrappent sans changement.
