@@ -97,8 +97,9 @@ User parle → AVAudioEngine → SFSpeechRecognizer → texte
 
 ## Conventions Swift
 
+- **Zéro warnings** : Le projet doit compiler sans aucun warning. Corriger tout warning avant de commit.
 - **Async/Await partout** : Tous les appels asynchrones utilisent `async/await`. Pas de callbacks, pas de closures de completion. Les flux continus utilisent `AsyncStream` / `AsyncThrowingStream`.
-- **Concurrency** : `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`. Tous les types sont `@MainActor` par défaut. Marquer `nonisolated` ou utiliser `actor` pour le travail background.
+- **Concurrency** : `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`. Tous les types sont `@MainActor` par défaut. Marquer `nonisolated` ou utiliser `actor` pour le travail background. Les types valeur partagés entre isolations (`Configuration`, `SentimentAnalyzer`, models) doivent être `nonisolated`.
 - **Services réseau** : `ClaudeService` et `AzureSpeechService` sont des `actor`.
 - **Patterns async utilisés** :
   - `AsyncStream<AVAudioPCMBuffer>` pour la capture micro continue

@@ -102,7 +102,7 @@ nonisolated enum BlendShapeTarget: String, CaseIterable, Sendable {
 
 // MARK: - Azure Index Mapping
 
-extension BlendShapeTarget {
+nonisolated extension BlendShapeTarget {
     /// Azure Speech SDK FacialExpression viseme order (0-51 = ARKit, 52-54 = extras)
     static let azureOrder: [BlendShapeTarget] = [
         .browDownLeft, .browDownRight, .browInnerUp, .browOuterUpLeft, .browOuterUpRight,

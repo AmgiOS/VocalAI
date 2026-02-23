@@ -1,32 +1,46 @@
 import Foundation
 
-enum Configuration {
+nonisolated enum Configuration {
     // MARK: - API Keys (stored in UserDefaults for development; use Keychain in production)
 
-    @AppStorageBacked(key: "azure_speech_key", defaultValue: "")
-    static var azureSpeechKey: String
+    static var azureSpeechKey: String {
+        get { UserDefaultsStore.get("azure_speech_key", default: "") }
+        set { UserDefaultsStore.set("azure_speech_key", value: newValue) }
+    }
 
-    @AppStorageBacked(key: "azure_speech_region", defaultValue: "eastus")
-    static var azureSpeechRegion: String
+    static var azureSpeechRegion: String {
+        get { UserDefaultsStore.get("azure_speech_region", default: "eastus") }
+        set { UserDefaultsStore.set("azure_speech_region", value: newValue) }
+    }
 
-    @AppStorageBacked(key: "claude_api_key", defaultValue: "")
-    static var claudeAPIKey: String
+    static var claudeAPIKey: String {
+        get { UserDefaultsStore.get("claude_api_key", default: "") }
+        set { UserDefaultsStore.set("claude_api_key", value: newValue) }
+    }
 
     // MARK: - Voice Settings
 
-    @AppStorageBacked(key: "azure_voice_name", defaultValue: "en-US-JennyNeural")
-    static var azureVoiceName: String
+    static var azureVoiceName: String {
+        get { UserDefaultsStore.get("azure_voice_name", default: "en-US-JennyNeural") }
+        set { UserDefaultsStore.set("azure_voice_name", value: newValue) }
+    }
 
-    @AppStorageBacked(key: "speech_language", defaultValue: "en-US")
-    static var speechLanguage: String
+    static var speechLanguage: String {
+        get { UserDefaultsStore.get("speech_language", default: "en-US") }
+        set { UserDefaultsStore.set("speech_language", value: newValue) }
+    }
 
     // MARK: - Claude Settings
 
-    @AppStorageBacked(key: "claude_model", defaultValue: "claude-sonnet-4-6")
-    static var claudeModel: String
+    static var claudeModel: String {
+        get { UserDefaultsStore.get("claude_model", default: "claude-sonnet-4-6") }
+        set { UserDefaultsStore.set("claude_model", value: newValue) }
+    }
 
-    @AppStorageBacked(key: "system_prompt", defaultValue: "You are a friendly, empathetic conversational partner. Respond naturally and concisely as if speaking face-to-face. Keep responses under 3 sentences unless asked for more detail.")
-    static var systemPrompt: String
+    static var systemPrompt: String {
+        get { UserDefaultsStore.get("system_prompt", default: "You are a friendly, empathetic conversational partner. Respond naturally and concisely as if speaking face-to-face. Keep responses under 3 sentences unless asked for more detail.") }
+        set { UserDefaultsStore.set("system_prompt", value: newValue) }
+    }
 
     // MARK: - Avatar
 
@@ -56,24 +70,19 @@ enum Configuration {
     }
 }
 
-// MARK: - Property Wrapper for UserDefaults-backed static properties
+// MARK: - UserDefaults Helper
 
-@propertyWrapper
-struct AppStorageBacked<Value: Codable> {
-    let key: String
-    let defaultValue: Value
-
-    var wrappedValue: Value {
-        get {
-            guard let data = UserDefaults.standard.data(forKey: key) else {
-                return defaultValue
-            }
-            return (try? JSONDecoder().decode(Value.self, from: data)) ?? defaultValue
+private nonisolated enum UserDefaultsStore {
+    static func get<V: Codable>(_ key: String, default defaultValue: V) -> V {
+        guard let data = UserDefaults.standard.data(forKey: key) else {
+            return defaultValue
         }
-        nonmutating set {
-            if let data = try? JSONEncoder().encode(newValue) {
-                UserDefaults.standard.set(data, forKey: key)
-            }
+        return (try? JSONDecoder().decode(V.self, from: data)) ?? defaultValue
+    }
+
+    static func set<V: Codable>(_ key: String, value: V) {
+        if let data = try? JSONEncoder().encode(value) {
+            UserDefaults.standard.set(data, forKey: key)
         }
     }
 }

@@ -1,7 +1,7 @@
 import Foundation
 
 /// Lightweight keyword-based sentiment analysis to determine emotion from text.
-enum SentimentAnalyzer {
+nonisolated enum SentimentAnalyzer {
     /// Analyze text and return the most likely emotion.
     static func analyze(_ text: String) -> EmotionType {
         let lowered = text.lowercased()
