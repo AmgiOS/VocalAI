@@ -20,7 +20,7 @@ Clean Architecture + MVVM avec injection de dépendances via TCA Dependencies.
 VocalAI/
 ├── App/
 │   ├── AppState.swift                            @Observable — permissions, showSettings, isAvatarLoaded
-│   └── Configuration.swift                       API keys via UserDefaults (@AppStorageBacked)
+│   └── Configuration.swift                       API keys via UserDefaults (computed properties + UserDefaultsStore)
 │
 ├── Domain/
 │   ├── Models/
@@ -178,3 +178,34 @@ Clés de confidentialité ajoutées via build settings (`INFOPLIST_KEY_*`) :
 - Les clés API sont stockées dans UserDefaults (dev). En production, utiliser Keychain.
 - `accessibilityReduceMotion` est respecté dans `IdleAnimator`.
 - Les fichiers `Services/`, `Audio/`, `Animation/`, `Rendering/`, `Utilities/` ne sont **pas** modifiés par les DataSources — ceux-ci les wrappent sans changement.
+
+## MCP Blender — Création d'avatar 3D
+
+Un serveur MCP Blender (`ahujasid/blender-mcp`) est configuré pour piloter Blender 4.4 depuis Claude Code.
+
+### Setup
+
+```bash
+# Le MCP est déjà configuré dans .claude.json
+# Dans Blender : Edit > Preferences > Add-ons > installer addon.py
+# Activer "Interface: Blender MCP" > panneau N > BlenderMCP > "Connect to Claude"
+# Le serveur tourne sur localhost:9876
+```
+
+### Prochaine étape : Création de l'avatar
+
+L'avatar doit répondre à ces exigences pour fonctionner avec l'app :
+
+1. **Format** : Export USDZ avec matériaux PBR embarqués
+2. **52 shape keys ARKit** : Nommés exactement comme dans `BlendShapeTarget.swift` :
+   - Eye brows : `browDownLeft`, `browDownRight`, `browInnerUp`, `browOuterUpLeft`, `browOuterUpRight`
+   - Eyes : `eyeBlinkLeft/Right`, `eyeLookDown/In/Out/Up Left/Right`, `eyeSquint/Wide Left/Right`
+   - Jaw : `jawForward`, `jawLeft`, `jawOpen`, `jawRight`
+   - Mouth : `mouthClose`, `mouthDimple/Frown/Press/Smile/Stretch Left/Right`, `mouthFunnel`, `mouthLeft/Right`, `mouthLowerDown/UpperUp Left/Right`, `mouthPucker`, `mouthRollLower/Upper`, `mouthShrugLower/Upper`
+   - Nose : `noseSneerLeft/Right`
+   - Cheek : `cheekPuff`, `cheekSquintLeft/Right`
+   - Tongue : `tongueOut`
+3. **Cadrage** : L'app scale l'avatar à ~2 unités de haut, caméra à `[0, 1.5, 0.8]`, FOV 30° — cadrage buste/visage
+4. **Topology** : Edge loops autour des yeux, bouche, nez pour des déformations propres
+5. **Matériaux** : PBR standard (base color, normal, roughness) — le lighting est géré par RealityKit (3 lights : key, fill, rim)
+6. **Destination** : `VocalAI/Resources/avatar.usdz`
