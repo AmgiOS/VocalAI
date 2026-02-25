@@ -38,7 +38,16 @@ final class AudioManager {
         stopMicCapture()
 
         let inputNode = engine.inputNode
-        let format = inputNode.outputFormat(forBus: 0)
+        let hwFormat = inputNode.outputFormat(forBus: 0)
+
+        // The hardware format can be invalid (sampleRate 0) if the audio session
+        // wasn't fully configured before accessing inputNode. Use a safe fallback.
+        let format: AVAudioFormat
+        if hwFormat.sampleRate > 0 && hwFormat.channelCount > 0 {
+            format = hwFormat
+        } else {
+            format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 48000, channels: 1, interleaved: false)!
+        }
 
         let stream = AsyncStream<AVAudioPCMBuffer> { continuation in
             self.micContinuation = continuation
@@ -115,7 +124,11 @@ final class AudioManager {
 
     /// Format matching the engine's input node (for speech recognition).
     var inputFormat: AVAudioFormat {
-        engine.inputNode.outputFormat(forBus: 0)
+        let hwFormat = engine.inputNode.outputFormat(forBus: 0)
+        if hwFormat.sampleRate > 0 && hwFormat.channelCount > 0 {
+            return hwFormat
+        }
+        return AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 48000, channels: 1, interleaved: false)!
     }
 
     // MARK: - Private

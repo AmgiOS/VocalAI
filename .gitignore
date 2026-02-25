@@ -21,5 +21,9 @@ Podfile.lock
 .build/
 Package.resolved
 
+# Blender source files (large, keep USDZ exports only)
+*.blend
+*.blend1
+
 # macOS
 .DS_Store

@@ -1,6 +1,6 @@
 # VocalAI
 
-Application iOS de conversation vocale avec un personnage 3D photoréaliste. Synchronisation labiale temps réel, expressions faciales émotionnelles, animations d'attente naturelles.
+Application iOS de conversation vocale avec un personnage 3D stylisé. Synchronisation labiale temps réel, expressions faciales émotionnelles, animations d'attente naturelles.
 
 ## Stack technique
 
@@ -79,7 +79,7 @@ VocalAI/
 ├── Animation/         LipSyncEngine (CADisplayLink), EmotionEngine, IdleAnimator, AnimationMixer
 ├── Rendering/         AvatarRenderer (scene RealityKit), BlendShapeController (poids blend shapes)
 ├── Utilities/         Interpolation (lerp, smoothstep), SentimentAnalyzer
-└── Resources/         avatar.usdz (placeholder — à remplacer par export CC5)
+└── Resources/         avatar.usdz (modèle Sketchfab stylisé avec 52 shape keys ARKit)
 ```
 
 ## Pipeline conversationnel
@@ -145,15 +145,50 @@ Les vues accèdent à l'état via `viewModel.state.conversationState`, `viewMode
 
 - **TCA Dependencies** — `pointfreeco/swift-dependencies` via SPM distant.
 
+## Avatar 3D
+
+### Modèle actuel
+
+Modèle importé depuis Sketchfab (tête + buste féminin stylisé anime), traité dans Blender :
+
+- **Source** : `avatar_source.blend` (racine du projet, gitignored)
+- **Export** : `VocalAI/Resources/avatar.usdz` (~36 MB)
+- **Meshes** : 6 objets — tête principale (18410 verts), yeux (2406 verts), cornée/glass (524 verts), cils (80+104 verts), sourcils (156 verts)
+- **Matériaux** : Texture base color 4K (peau), texture iris 1K (yeux), Glass transparent (cornée), cils, sourcils
+- **52 shape keys ARKit** sur le mesh principal (`Objectn`) — noms camelCase exactement comme `BlendShapeTarget.swift`
+
+### Shape keys — Approche technique
+
+Les shape keys sont créés par déplacement procédural avec influence quadratique `(1 - t²)²` :
+
+- **Zones anatomiques strictes** : chaque shape key ne touche QUE sa zone (paupières, lèvres, sourcils, etc.) via des guards de position (Z, Y)
+- **`from_mix=False` OBLIGATOIRE** : toujours utiliser `obj.shape_key_add(name=..., from_mix=False)` — sinon corruption en cascade
+- **Amplitudes calibrées par zone** : brows ~0.02, eyes ~0.018, mouth ~0.018, corners ~0.015, cheeks ~0.012
+- **Side influence** : séparation gauche/droite avec fade de 0.02 unités au centre (X=0)
+- **Max displacement** : ~0.05-0.08 (jawOpen le plus fort). Suffisant pour le rendu temps réel à 60 FPS avec valeurs interpolées
+
+### Exigences pour un nouvel avatar
+
+1. **Format** : Export USDZ avec matériaux PBR embarqués
+2. **52 shape keys ARKit** : Nommés exactement comme dans `BlendShapeTarget.swift`
+3. **Cadrage** : L'app scale l'avatar à ~2 unités de haut, caméra à `[0, 1.5, 0.8]`, FOV 30° — cadrage buste/visage
+4. **Topology** : Edge loops autour des yeux, bouche, nez pour des déformations propres
+5. **Matériaux** : PBR standard (base color, normal, roughness) — le lighting est géré par RealityKit (3 lights : key, fill, rim)
+6. **Destination** : `VocalAI/Resources/avatar.usdz`
+
 ## Blend Shapes
 
-Les 55 positions Azure correspondent directement aux 52 ARKit blend shapes + 3 extras. Le mapping est dans `BlendShapeTarget.azureOrder`. L'avatar CC5 doit être exporté avec les noms ARKit.
+Les 55 positions Azure correspondent directement aux 52 ARKit blend shapes + 3 extras (headRoll, leftEyeRoll, rightEyeRoll ignorés). Le mapping est dans `BlendShapeTarget.azureOrder`. Le `BlendShapeController` match les noms via `target.rawValue`.
 
 ## Animation — Priorités du mixer
 
 1. **Lip sync** (haute priorité) — possède les shapes bouche pendant la parole
 2. **Émotion** — possède les sourcils, blend avec les yeux
 3. **Idle** (basse priorité) — respiration, clignements, micro-mouvements
+
+## AudioManager — Format micro
+
+`AudioManager.startMicCapture()` valide le format hardware avant `installTap`. Si `inputNode.outputFormat(forBus: 0)` retourne un format invalide (sampleRate=0), un fallback Float32/48kHz/mono est utilisé. La session audio (`configureForVoiceChat`) doit être appelée via `startEngine()` **avant** `startMicCapture()`.
 
 ## Commandes utiles
 
@@ -163,6 +198,9 @@ Les 55 positions Azure correspondent directement aux 52 ARKit blend shapes + 3 e
 
 # Build (depuis terminal)
 xcodebuild -project VocalAI.xcodeproj -scheme VocalAI -destination 'generic/platform=iOS' build
+
+# Build sans signing (CI / terminal sans certificat)
+xcodebuild -project VocalAI.xcodeproj -scheme VocalAI -destination 'generic/platform=iOS' build CODE_SIGNING_ALLOWED=NO
 ```
 
 ## Info.plist
@@ -192,20 +230,11 @@ Un serveur MCP Blender (`ahujasid/blender-mcp`) est configuré pour piloter Blen
 # Le serveur tourne sur localhost:9876
 ```
 
-### Prochaine étape : Création de l'avatar
+### Workflow avatar dans Blender
 
-L'avatar doit répondre à ces exigences pour fonctionner avec l'app :
-
-1. **Format** : Export USDZ avec matériaux PBR embarqués
-2. **52 shape keys ARKit** : Nommés exactement comme dans `BlendShapeTarget.swift` :
-   - Eye brows : `browDownLeft`, `browDownRight`, `browInnerUp`, `browOuterUpLeft`, `browOuterUpRight`
-   - Eyes : `eyeBlinkLeft/Right`, `eyeLookDown/In/Out/Up Left/Right`, `eyeSquint/Wide Left/Right`
-   - Jaw : `jawForward`, `jawLeft`, `jawOpen`, `jawRight`
-   - Mouth : `mouthClose`, `mouthDimple/Frown/Press/Smile/Stretch Left/Right`, `mouthFunnel`, `mouthLeft/Right`, `mouthLowerDown/UpperUp Left/Right`, `mouthPucker`, `mouthRollLower/Upper`, `mouthShrugLower/Upper`
-   - Nose : `noseSneerLeft/Right`
-   - Cheek : `cheekPuff`, `cheekSquintLeft/Right`
-   - Tongue : `tongueOut`
-3. **Cadrage** : L'app scale l'avatar à ~2 unités de haut, caméra à `[0, 1.5, 0.8]`, FOV 30° — cadrage buste/visage
-4. **Topology** : Edge loops autour des yeux, bouche, nez pour des déformations propres
-5. **Matériaux** : PBR standard (base color, normal, roughness) — le lighting est géré par RealityKit (3 lights : key, fill, rim)
-6. **Destination** : `VocalAI/Resources/avatar.usdz`
+1. Importer un modèle (GLB/FBX) ou créer dans Blender
+2. Positionner à l'origine, scaler pour Z ∈ [0, 2.0]
+3. Créer Basis shape key avec `from_mix=False`
+4. Ajouter les 52 shape keys ARKit avec influence procédurale (zones anatomiques serrées)
+5. Exporter USDZ : `bpy.ops.wm.usd_export(export_shapekeys=True, generate_preview_surface=True)`
+6. Placer dans `VocalAI/Resources/avatar.usdz`

@@ -413,7 +413,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 4Q3ASJHS6S;
+				DEVELOPMENT_TEAM = P8N8P57QSQ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "VocalAI needs access to your microphone for voice conversations.";
@@ -447,7 +447,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 4Q3ASJHS6S;
+				DEVELOPMENT_TEAM = P8N8P57QSQ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "VocalAI needs access to your microphone for voice conversations.";
